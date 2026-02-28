@@ -20,7 +20,7 @@ const io = new Server(server, {
   },
 });
 
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Supabase client
