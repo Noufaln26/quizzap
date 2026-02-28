@@ -18,6 +18,8 @@ const io = new Server(server, {
     origin: CLIENT_URL,
     methods: ['GET', 'POST'],
   },
+  pingInterval: 10000,
+  pingTimeout: 5000,
 });
 
 app.use(cors({ origin: CLIENT_URL }));
@@ -247,6 +249,8 @@ io.on('connection', (socket) => {
     gameRooms.set(pin, room);
 
     socket.join(`room:${pin}`);
+    socket.data.pin = pin;
+    socket.data.isHost = true;
     socket.emit('game:created', { pin, quizTitle: quiz.title, questionCount: quiz.questions.length });
 
     // Auto-cleanup after 2 hours
@@ -379,16 +383,21 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(pin);
     if (!room) return;
 
-    if (room.hostSocketId === socket.id) {
+    if (socket.data.isHost) {
       io.to(`room:${pin}`).emit('host:disconnected');
       gameRooms.delete(pin);
     } else {
       const player = room.players.get(socket.id);
       if (player) {
         room.players.delete(socket.id);
+        // If a player leaves mid-question and all remaining players have answered, trigger reveal
+        if (room.status === 'question' && room.players.size > 0 && room.answersReceived.size >= room.players.size) {
+          triggerReveal(pin, room);
+        }
         io.to(room.hostSocketId).emit('player:left', {
           nickname: player.nickname,
           playerCount: room.players.size,
+          players: [...room.players.values()].map((p) => ({ nickname: p.nickname })),
         });
       }
     }

@@ -76,8 +76,11 @@ export default function PlayerGame() {
     })
 
     socket.on('host:disconnected', () => {
-      alert('Host disconnected. Game over.')
-      navigate('/')
+      setPhase('disconnected')
+    })
+
+    socket.on('disconnect', () => {
+      setPhase('disconnected')
     })
 
     return () => {
@@ -89,6 +92,7 @@ export default function PlayerGame() {
       socket.off('leaderboard:update')
       socket.off('game:ended')
       socket.off('host:disconnected')
+      socket.off('disconnect')
     }
   }, [pin, nickname, navigate])
 
@@ -302,6 +306,19 @@ export default function PlayerGame() {
             Play Again ⚡
           </button>
         </div>
+      </div>
+    )
+  }
+
+  if (phase === 'disconnected') {
+    return (
+      <div className="h-full bg-zap flex flex-col items-center justify-center px-6 text-center">
+        <div className="text-6xl mb-4">⚡</div>
+        <h2 className="font-display text-3xl text-red-400 mb-2">Connection Lost</h2>
+        <p className="text-white/60 font-body mb-6">The game session ended or the connection dropped.</p>
+        <button onClick={() => navigate('/')} className="bg-zap-yellow text-zap-purple font-display text-xl px-8 py-3 rounded-2xl active:scale-95 transition-transform">
+          Go Home
+        </button>
       </div>
     )
   }
