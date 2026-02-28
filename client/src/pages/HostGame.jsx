@@ -84,7 +84,13 @@ export default function HostGame() {
       sounds.podium()
     })
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        setPhase('disconnected')
+      }
+    })
+
+    socket.on('reconnect_failed', () => {
       setPhase('disconnected')
     })
 
@@ -99,6 +105,7 @@ export default function HostGame() {
       socket.off('leaderboard:update')
       socket.off('game:ended')
       socket.off('disconnect')
+      socket.off('reconnect_failed')
     }
   }, [])
 
