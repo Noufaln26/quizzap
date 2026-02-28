@@ -84,6 +84,16 @@ export default function HostGame() {
       sounds.podium()
     })
 
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        setPhase('disconnected')
+      }
+    })
+
+    socket.on('reconnect_failed', () => {
+      setPhase('disconnected')
+    })
+
     return () => {
       clearInterval(timerRef.current)
       socket.off('game:created')
@@ -94,6 +104,8 @@ export default function HostGame() {
       socket.off('answer:reveal')
       socket.off('leaderboard:update')
       socket.off('game:ended')
+      socket.off('disconnect')
+      socket.off('reconnect_failed')
     }
   }, [])
 
@@ -398,6 +410,19 @@ export default function HostGame() {
             Play Again ⚡
           </button>
         </div>
+      </div>
+    )
+  }
+
+  if (phase === 'disconnected') {
+    return (
+      <div className="h-full bg-zap flex flex-col items-center justify-center px-8 text-center">
+        <div className="text-6xl mb-4">⚡</div>
+        <h2 className="font-display text-3xl text-red-400 mb-2">Connection Lost</h2>
+        <p className="text-white/60 font-body mb-6">The server connection dropped. Please restart the game.</p>
+        <button onClick={() => { socket.connect(); navigate('/') }} className="bg-zap-yellow text-zap-purple font-display text-xl px-8 py-3 rounded-2xl active:scale-95 transition-transform">
+          Go Home
+        </button>
       </div>
     )
   }

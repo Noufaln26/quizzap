@@ -18,6 +18,12 @@ const io = new Server(server, {
     origin: CLIENT_URL,
     methods: ['GET', 'POST'],
   },
+  pingInterval: 25000,
+  pingTimeout: 20000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 30000,
+    skipMiddlewares: true,
+  },
 });
 
 app.use(cors({ origin: CLIENT_URL }));
@@ -136,32 +142,32 @@ app.post('/quizzes', adminAuth, async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Insert questions
+  // Bulk insert questions + answer_options (3 round-trips instead of 2N+1)
   if (questions && questions.length > 0) {
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      const { data: question, error: qErr } = await supabase
-        .from('questions')
-        .insert({
-          quiz_id: quiz.id,
-          question_text: q.question_text,
-          image_url: q.image_url || null,
-          timer_seconds: q.timer_seconds || 20,
-          order_index: i,
-        })
-        .select()
-        .single();
-      if (qErr) continue;
+    const questionRows = questions.map((q, i) => ({
+      quiz_id: quiz.id,
+      question_text: q.question_text,
+      image_url: q.image_url || null,
+      timer_seconds: q.timer_seconds || 20,
+      order_index: i,
+    }));
 
-      const opts = (q.answer_options || []).map((o) => ({
-        question_id: question.id,
-        text: o.text,
-        color: o.color,
-        is_correct: o.is_correct,
-      }));
-      if (opts.length > 0) {
-        await supabase.from('answer_options').insert(opts);
-      }
+    const { data: insertedQuestions, error: qErr } = await supabase
+      .from('questions')
+      .insert(questionRows)
+      .select();
+
+    if (!qErr && insertedQuestions) {
+      const sortedQuestions = [...insertedQuestions].sort((a, b) => a.order_index - b.order_index);
+      const allOpts = sortedQuestions.flatMap((dbQuestion, i) =>
+        (questions[i].answer_options || []).map((o) => ({
+          question_id: dbQuestion.id,
+          text: o.text,
+          color: o.color,
+          is_correct: o.is_correct,
+        }))
+      );
+      if (allOpts.length > 0) await supabase.from('answer_options').insert(allOpts);
     }
   }
 
@@ -178,29 +184,35 @@ app.put('/quizzes/:id', adminAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   if (questions) {
-    // Delete existing questions/options (cascade)
+    // Delete existing questions/options (cascade handles answer_options)
     await supabase.from('questions').delete().eq('quiz_id', req.params.id);
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      const { data: question } = await supabase
-        .from('questions')
-        .insert({
-          quiz_id: req.params.id,
-          question_text: q.question_text,
-          image_url: q.image_url || null,
-          timer_seconds: q.timer_seconds || 20,
-          order_index: i,
-        })
-        .select()
-        .single();
-      if (!question) continue;
-      const opts = (q.answer_options || []).map((o) => ({
-        question_id: question.id,
-        text: o.text,
-        color: o.color,
-        is_correct: o.is_correct,
+
+    if (questions.length > 0) {
+      const questionRows = questions.map((q, i) => ({
+        quiz_id: req.params.id,
+        question_text: q.question_text,
+        image_url: q.image_url || null,
+        timer_seconds: q.timer_seconds || 20,
+        order_index: i,
       }));
-      if (opts.length > 0) await supabase.from('answer_options').insert(opts);
+
+      const { data: insertedQuestions, error: qErr } = await supabase
+        .from('questions')
+        .insert(questionRows)
+        .select();
+
+      if (!qErr && insertedQuestions) {
+        const sortedQuestions = [...insertedQuestions].sort((a, b) => a.order_index - b.order_index);
+        const allOpts = sortedQuestions.flatMap((dbQuestion, i) =>
+          (questions[i].answer_options || []).map((o) => ({
+            question_id: dbQuestion.id,
+            text: o.text,
+            color: o.color,
+            is_correct: o.is_correct,
+          }))
+        );
+        if (allOpts.length > 0) await supabase.from('answer_options').insert(allOpts);
+      }
     }
   }
 
@@ -247,6 +259,8 @@ io.on('connection', (socket) => {
     gameRooms.set(pin, room);
 
     socket.join(`room:${pin}`);
+    socket.data.pin = pin;
+    socket.data.isHost = true;
     socket.emit('game:created', { pin, quizTitle: quiz.title, questionCount: quiz.questions.length });
 
     // Auto-cleanup after 2 hours
@@ -379,16 +393,21 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(pin);
     if (!room) return;
 
-    if (room.hostSocketId === socket.id) {
+    if (socket.data.isHost) {
       io.to(`room:${pin}`).emit('host:disconnected');
       gameRooms.delete(pin);
     } else {
       const player = room.players.get(socket.id);
       if (player) {
         room.players.delete(socket.id);
+        // If a player leaves mid-question and all remaining players have answered, trigger reveal
+        if (room.status === 'question' && room.players.size > 0 && room.answersReceived.size >= room.players.size) {
+          triggerReveal(pin, room);
+        }
         io.to(room.hostSocketId).emit('player:left', {
           nickname: player.nickname,
           playerCount: room.players.size,
+          players: [...room.players.values()].map((p) => ({ nickname: p.nickname })),
         });
       }
     }
