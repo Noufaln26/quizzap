@@ -400,6 +400,16 @@ io.on('connection', (socket) => {
       const player = room.players.get(socket.id);
       if (player) {
         room.players.delete(socket.id);
+
+        // If no players remain during an active game, end it
+        if (room.players.size === 0 && room.status !== 'lobby' && room.status !== 'ended') {
+          room.status = 'ended';
+          const leaderboard = getLeaderboard(room);
+          io.to(room.hostSocketId).emit('game:ended', { leaderboard, reason: 'no_players' });
+          gameRooms.delete(pin);
+          return;
+        }
+
         // If a player leaves mid-question and all remaining players have answered, trigger reveal
         if (room.status === 'question' && room.players.size > 0 && room.answersReceived.size >= room.players.size) {
           triggerReveal(pin, room);
