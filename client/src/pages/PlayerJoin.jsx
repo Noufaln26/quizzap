@@ -18,8 +18,6 @@ export default function PlayerJoin() {
     setLoading(true)
     sounds.answerSubmit()
 
-    if (!socket.connected) socket.connect()
-
     socket.off('join:success')
     socket.off('join:error')
 
@@ -34,7 +32,14 @@ export default function PlayerJoin() {
       socket.off('join:success')
     })
 
-    socket.emit('player:join', { pin, nickname: nickname.trim() })
+    const doJoin = () => socket.emit('player:join', { pin, nickname: nickname.trim() })
+
+    if (socket.connected) {
+      doJoin()
+    } else {
+      socket.once('connect', doJoin)
+      socket.connect()
+    }
   }
 
   return (
