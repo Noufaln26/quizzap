@@ -79,7 +79,15 @@ export default function PlayerGame() {
       setPhase('disconnected')
     })
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      // Only show disconnect screen immediately if the server explicitly ended the connection.
+      // For transient drops (transport errors, timeouts), wait for reconnection to fail.
+      if (reason === 'io server disconnect') {
+        setPhase('disconnected')
+      }
+    })
+
+    socket.on('reconnect_failed', () => {
       setPhase('disconnected')
     })
 
@@ -93,6 +101,7 @@ export default function PlayerGame() {
       socket.off('game:ended')
       socket.off('host:disconnected')
       socket.off('disconnect')
+      socket.off('reconnect_failed')
     }
   }, [pin, nickname, navigate])
 
