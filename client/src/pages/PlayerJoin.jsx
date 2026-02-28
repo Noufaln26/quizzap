@@ -32,14 +32,12 @@ export default function PlayerJoin() {
       socket.off('join:success')
     })
 
-    const doJoin = () => socket.emit('player:join', { pin, nickname: nickname.trim() })
+    socket.once('connect', () => {
+      socket.emit('player:join', { pin, nickname: nickname.trim() })
+    })
 
-    if (socket.connected) {
-      doJoin()
-    } else {
-      socket.once('connect', doJoin)
-      socket.connect()
-    }
+    socket.disconnect()
+    socket.connect()
   }
 
   return (
