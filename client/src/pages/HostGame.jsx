@@ -12,6 +12,15 @@ const COLORS = [
   { bg: 'bg-answer-green', label: 'D', shape: '■' },
 ]
 
+function PlayerCountBadge({ count }) {
+  return (
+    <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1.5">
+      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+      <span className="font-body text-white/80 text-sm font-bold">{count} online</span>
+    </div>
+  )
+}
+
 export default function HostGame() {
   const navigate = useNavigate()
   const [phase, setPhase] = useState('setup') // setup | lobby | question | reveal | leaderboard | podium
@@ -240,8 +249,11 @@ export default function HostGame() {
           <div className="flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <span className="font-body text-white/50 font-bold">Q{question?.questionNumber} of {question?.totalQuestions}</span>
-              <div className="bg-zap-yellow/20 rounded-full px-4 py-1">
-                <span className="font-display text-zap-yellow">{Math.round(timeLeft / 100 * (question?.timerSeconds || 20))}s</span>
+              <div className="flex items-center gap-2">
+                <PlayerCountBadge count={players.length} />
+                <div className="bg-zap-yellow/20 rounded-full px-4 py-1">
+                  <span className="font-display text-zap-yellow">{Math.round(timeLeft / 100 * (question?.timerSeconds || 20))}s</span>
+                </div>
               </div>
             </div>
 
@@ -285,47 +297,70 @@ export default function HostGame() {
   // ── Reveal ────────────────────────────────────────────────────────────────
   if (phase === 'reveal') {
     const totalVotes = revealData?.totalAnswered || 0
+    const correctOpt = question?.options?.[revealData?.correctIndex]
     return (
-      <div className="h-full bg-zap flex flex-col p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-3xl text-zap-yellow">Answer Revealed!</h2>
-          <span className="text-white/50 font-body">{revealData?.totalAnswered}/{revealData?.totalPlayers} answered</span>
+      <div className="h-full bg-zap flex flex-col">
+        {/* Header */}
+        <div className="bg-white/5 border-b border-white/10 px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-lg font-bold">✓</span>
+            </div>
+            <div>
+              <h2 className="font-display text-xl text-white leading-tight">Answer Revealed!</h2>
+              <p className="text-white/40 font-body text-xs">{revealData?.totalAnswered}/{revealData?.totalPlayers} players answered</p>
+            </div>
+          </div>
+          <PlayerCountBadge count={players.length} />
         </div>
 
-        <div className="flex-1 grid grid-cols-2 gap-4 mb-6">
+        {/* Correct answer highlight */}
+        <div className="px-5 pt-4 pb-2">
+          <div className="bg-green-500/15 border-2 border-green-400/60 rounded-2xl px-5 py-3 flex items-center gap-4 animate-bounce-in">
+            <div className="flex-1">
+              <p className="text-green-400 font-body text-xs uppercase tracking-wider mb-0.5">Correct Answer</p>
+              <p className="font-display text-2xl text-white leading-tight">{correctOpt?.text}</p>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="font-display text-3xl text-green-400">{revealData?.voteCounts?.[revealData?.correctIndex] || 0}</p>
+              <p className="text-white/40 font-body text-xs">votes</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Vote bars for all options */}
+        <div className="flex-1 px-5 py-3 space-y-3 overflow-y-auto">
           {question?.options?.map((opt, i) => {
             const isCorrect = i === revealData?.correctIndex
             const votes = revealData?.voteCounts?.[i] || 0
             const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0
             return (
-              <div
-                key={i}
-                className={`${COLORS[i].bg} rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden ${!isCorrect ? 'opacity-50' : ''}`}
-              >
-                {isCorrect && (
-                  <div className="absolute top-3 right-3 bg-white rounded-full w-8 h-8 flex items-center justify-center">
-                    <span className="text-green-600 text-lg">✓</span>
+              <div key={i} className={`transition-opacity ${isCorrect ? 'opacity-100' : 'opacity-55'}`}>
+                <div className="flex items-center gap-3 mb-1.5">
+                  <div className={`${COLORS[i].bg} w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0`}>
+                    <span className="text-white text-sm">{COLORS[i].shape}</span>
                   </div>
-                )}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xl text-white">{COLORS[i].shape}</span>
-                  <span className="font-body font-bold text-white">{opt.text}</span>
+                  <span className={`font-body font-bold flex-1 text-sm ${isCorrect ? 'text-white' : 'text-white/70'}`}>{opt.text}</span>
+                  {isCorrect && <span className="text-green-400 text-base">✓</span>}
+                  <span className="font-display text-white/80 text-sm w-20 text-right">{votes} <span className="text-white/40 font-body text-xs">({pct}%)</span></span>
                 </div>
-                <div className="bg-black/20 rounded-full h-2 mb-1">
-                  <div className="bg-white rounded-full h-2 transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-3 bg-white/10 rounded-full overflow-hidden ml-11">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${isCorrect ? 'bg-green-400' : 'bg-white/40'}`}
+                    style={{ width: `${pct}%` }}
+                  />
                 </div>
-                <span className="font-display text-white text-sm">{votes} votes ({pct}%)</span>
               </div>
             )
           })}
         </div>
 
-        <div className="flex gap-3">
+        <div className="px-5 pb-5 pt-2">
           <button
             onClick={showLeaderboard}
-            className="flex-1 bg-zap-yellow text-zap-purple font-display text-xl py-4 rounded-2xl active:scale-95 transition-transform"
+            className="w-full bg-zap-yellow text-zap-purple font-display text-xl py-4 rounded-2xl active:scale-95 transition-transform"
           >
-            Show Leaderboard
+            Show Leaderboard ⚡
           </button>
         </div>
       </div>
@@ -336,7 +371,10 @@ export default function HostGame() {
   if (phase === 'leaderboard') {
     return (
       <div className="h-full bg-zap flex flex-col p-6">
-        <h2 className="font-display text-4xl text-zap-yellow text-center mb-6 animate-slide-down">⚡ Leaderboard</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-display text-4xl text-zap-yellow animate-slide-down">⚡ Leaderboard</h2>
+          <PlayerCountBadge count={players.length} />
+        </div>
         <div className="flex-1 overflow-y-auto space-y-3 mb-6">
           {leaderboard.slice(0, 10).map((p, i) => (
             <div
