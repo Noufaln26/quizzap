@@ -11,22 +11,30 @@ const upload = multer({ storage: multer.memoryStorage() });
 const app = express();
 const server = http.createServer(app);
 
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+// Support multiple allowed origins as a comma-separated list so both a local
+// dev client and a deployed frontend URL can connect at the same time.
+const rawClientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = rawClientUrl.split(',').map(u => u.trim()).filter(Boolean);
+const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
 
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_URL,
+    origin: corsOrigin,
     methods: ['GET', 'POST'],
   },
+  // Cellular connections have higher and more variable latency than LAN WiFi.
+  // Increase the ping timeout so transient delays don't cause false disconnects.
   pingInterval: 25000,
-  pingTimeout: 20000,
+  pingTimeout: 40000,
   connectionStateRecovery: {
-    maxDisconnectionDuration: 30000,
+    // Give players up to 60 s to recover after a WiFi → cellular handoff or a
+    // brief signal drop before the server considers them gone.
+    maxDisconnectionDuration: 60000,
     skipMiddlewares: true,
   },
 });
 
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 
 // Supabase client
