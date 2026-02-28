@@ -15,12 +15,12 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: CLIENT_URL,
     methods: ['GET', 'POST'],
   },
 });
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: CLIENT_URL }));
 app.use(express.json());
 
 // Supabase client
